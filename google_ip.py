@@ -14,7 +14,7 @@ import traceback
 import threading
 import Queue
 
-URL='http://restapi.amap.com/v3/geocode/regeo?location=%s,%s&key=5973fb6764b8093257dcfd6ff43f6746&s=rsv3&extensions=base'
+URL='http://maps.google.com/maps/api/geocode/json?latlng=%s,%s&language=zh-CN&sensor=false'
 
 def deco(func):
     def _deco(*args, **kwargs):
@@ -81,15 +81,29 @@ class ThreadWork(threading.Thread):
                 # self.lock.acquire()
                 try:
                     s=json.loads(gdjson)
-                    prov =  s['regeocode']['addressComponent']['province']
-                    city = s['regeocode']['addressComponent']['city']
-                    # adcode = s['regeocode']['addressComponent']['adcode']
-                    if prov == []:
+                    prov = ''
+                    city = ''
+                    country=''
+                    # adcode=0
+                    if s['status'] == 'OK':
+                        if s['results']:
+                            for address in s['results'][0]['address_components']:
+                                _types = address.get('types', [])
+                                if 'postal_code' in _types: # 邮编
+                                    pass
+                                    # adcode = address['short_name']
+                                elif 'political' in _types:
+                                    if 'country' in _types: # 国家
+                                        country=address['short_name']
+                                    if 'administrative_area_level_1' in _types:
+                                        prov = address['short_name']
+                                    if 'locality' in _types:
+                                        city = address['short_name']
+
+                    if not prov:
                         self.error_log.write("nofound:%s\n"%ddc[1])
                         break
-                    if city == []:
-                        city = ''
-                    self.result_file.write("%s`%s`%s\n"%(ddc[0], prov.encode('utf8'), city.encode('utf8')))
+                    self.result_file.write("%s`%s`%s`%s\n"%(ddc[0], country.encode('utf8'), prov.encode('utf8'), city.encode('utf8')))
                 except Exception,e:
                     logging.error(e.args)
                     self.error_log.write("%s`%s\n"%ddc)
@@ -136,7 +150,7 @@ class Worker(object):
     threadCount=6    #开启线程数，默认6个线程
 
     def __init__(self, input, output):
-        self.error_line=open("error_line", "w")
+        self.error_line=open("error_line_google", "w")
         self.result_file=open(output, "w")
         self.ths = []
         self.input_file = input
@@ -148,22 +162,22 @@ class Worker(object):
             thread.start()
             self.ths.append(thread)
 
-    # def readIP(self):
-    #     with open(self.input_file,"r") as ip_file:
-    #         for line in ip_file:
-    #             line=line.strip()
-    #             rec = line.split('`')
-    #             if len(rec) !=3:
-    #                 self.error_line.write("fielderr:%s\n"%line)
-    #                 continue
-    #             if float(rec[-2])>0  and float(rec[-1])>0:
-    #                 lat = '%.4f'%(float(float(rec[-1])/float(360000)))
-    #                 lon = '%.4f'%(float(float(rec[-2])/float(360000)))
-    #
-    #             _url = URL % (lat, lon)
-    #             self.qurl.put((rec[0], _url), block=True)
-    #     global READ_FINISH
-    #     READ_FINISH=True
+    def readIP(self):
+        with open(self.input_file,"r") as ip_file:
+            for line in ip_file:
+                line=line.strip()
+                rec = line.split('`')
+                if len(rec) !=3:
+                    self.error_line.write("fielderr:%s\n"%line)
+                    continue
+                if float(rec[-2])>0  and float(rec[-1])>0:
+                    lat = '%.4f'%(float(float(rec[-1])/float(360000)))
+                    lon = '%.4f'%(float(float(rec[-2])/float(360000)))
+
+                _url = URL % (lat, lon)
+                self.qurl.put((rec[0], _url), block=True)
+        global READ_FINISH
+        READ_FINISH=True
 
     def wait(self):
         for t in self.ths:
@@ -177,67 +191,6 @@ class Worker(object):
         producer.join()
         self.wait()
         # self.qurl.join()
-
-class IP2Addr(object):
-    url='http://restapi.amap.com/v3/geocode/regeo?location=%s,%s&key=5973fb6764b8093257dcfd6ff43f6746&s=rsv3&radius=1000&extensions=none'
-    # ipfile="get250.china.seq.log"
-
-    def __init__(self):
-        self.error_line=open("error_line", "w")
-        self.result_file=open("tf_ip_add", "w")
-
-    def get_add(self, lat, lon):
-        _url = self.url % (lat, lon)
-        result=get_info(_url)
-        if result:
-            try:
-                s = json.loads(result)
-                prov = s['regeocode']['addressComponent']['province']
-                city = s['regeocode']['addressComponent']['city']
-                if prov == []:
-                    # prov = ''
-                    self.error_line.write("nofound:%s\n"%_url)
-                    return False
-                if city == []:
-                    city = ''
-
-                return (prov.encode('utf8'), city.encode('utf8'))
-            except Exception, e:
-                logging.error(e.args)
-        return False
-
-    def readIP(self):
-        with open(IPFILE,"r") as ip_file:
-            for line in ip_file:
-                line=line.strip()
-                rec = line.split('`')
-                if len(rec) !=6:
-                    self.error_line.write("fielderr:%s\n"%line)
-                    continue
-
-                if float(rec[-2])>0  and float(rec[-1])>0:
-                    lat = '%.4f'%(float(float(rec[-1])/float(360000)))
-                    lon = '%.4f'%(float(float(rec[-2])/float(360000)))
-                    result=self.get_add(lat, lon)
-                    if result:
-                        self.result_file.write("%s`%s`%s\n" % (rec[0], result[0], result[1]))
-                    else:
-                        self.error_line.write("adderr:%s\n"%line)
-                else:
-                    self.error_line.write("jwerr:%s\n"%line)
-
-    def __del__(self):
-        if self.result_file:
-            self.result_file.close()
-        if self.error_line:
-            self.error_line.close()
-
-
-    def run(self):
-        self.readIP()
-
-
-
 
 if __name__ == "__main__":
     worker=Worker(sys.argv[1], sys.argv[2])

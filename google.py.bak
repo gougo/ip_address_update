@@ -1,0 +1,152 @@
+# !/usr/bin/env python
+# -*- coding: utf-8 -*-
+'''
+Created on 2014-7-9
+
+@author: yaoyan
+'''
+# !/usr/bin/env python
+# -*- coding: utf-8 -*-
+'''
+Created on 2014-7-7
+
+@author: Administrator
+'''
+import urllib2
+import sys
+import json
+import time
+import logging
+
+def deco(func):
+    def _deco(*args, **kwargs):
+        retry_sec = 30
+        ret = None
+        count = 0
+        while True:
+            try:
+                ret = func(*args, **kwargs)     
+                return ret          
+            except Exception, e:
+                if count > 3 :
+                    raise 
+                count += 1       
+                time.sleep(retry_sec + count*10)         
+        return False
+    return _deco
+def get_attrvalue(node, attrname):
+    return node.getAttribute(attrname) if node else ''
+
+def get_nodevalue(node, index = 0):
+    return node.childNodes[index].nodeValue if node else ''
+
+def get_xmlnode(node,name):
+    return node.getElementsByTagName(name) if node else []
+
+def xml_to_string(filename='user.xml'):
+    doc = minidom.parse(filename)
+    return doc.toxml('UTF-8')
+
+def get_xml_data(filename='user.xml'):
+    print filename
+    doc = minidom.parse(filename)
+    root = doc.documentElement
+    status = get_xmlnode(root,'status')
+    status_string = get_nodevalue(status[0]).encode('utf-8','ignore')
+    if status_string.lower() != 'ok':
+        return ip,''
+    result_nodes = get_xmlnode(root,'result')
+    address_nodes = get_xmlnode(result_nodes[0],'address_component')
+    prov = ''
+    city = ''
+    coun = ''
+    for node in address_nodes:
+        node_type_1 = get_xmlnode(node,'type')
+        node_type_2 = get_xmlnode(node,'type')
+        node_short_name = get_xmlnode(node,'short_name')
+        ip_nodetype1_name =get_nodevalue(node_type_1[0]).encode('utf-8','ignore')
+        ip_nodetype2_name = get_nodevalue(node_type_2[0]).encode('utf-8','ignore')
+        ip_short_name = get_nodevalue(node_short_name[0]).encode('utf-8','ignore')
+        if ip_nodetype1_name in ['administrative_area_level_1','locality','country'] \
+            or ip_nodetype2_name in ['administrative_area_level_1','locality','country']:
+            if ip_nodetype1_name == 'country' or ip_nodetype2_name == 'country':
+                coun = ip_short_name
+            elif ip_nodetype1_name == 'administrative_area_level_1' or ip_nodetype2_name == 'administrative_area_level_1':
+                prov = ip_short_name
+            elif ip_nodetype1_name == 'locality' or ip_nodetype2_name == 'locality':
+                city = ip_short_name
+                if city.find("市")>=0 or city.find("区")>=0:
+                    city = city
+                else:
+                    city = city + "市"
+    print coun,prov,city
+    return coun,prov,city
+
+@deco
+def get_info(url):
+    print url
+    try:
+        response = urllib2.urlopen(url)
+        if response is None:
+            return None
+        else:
+            return response.read()
+    except urllib2.HTTPError, e:
+        logging.warn("saving transmited result to scheduler failed, remote server response: %s, %s",e.code, e.read())
+        raise
+    except urllib2.URLError, e:
+        logger.warn("saving transmited result to scheduler failed, and remote server has no response: %s",
+                    e.args)
+        raise
+    except Exception, e:
+        logger.warn('%s\n%s',e.args, traceback.format_exc())
+        return False
+
+if __name__ == "__main__":
+    ip_file_name = sys.argv[1]
+    output_file = sys.argv[2]
+    output_result_file = sys.argv[3]
+    output_handle = open(output_file, "w")     
+    output_result_handle = open(output_result_file, "w") 
+    i = 0
+    old_line = ''
+    data = ''
+    for line in open(ip_file_name, "r"): 
+        try:
+            i = i+1
+            output_handle = open(output_file, "w")   
+            if line[-1] == '\n':
+                line = line[:-1] 
+            if line[-1] == '\r':
+                line = line[:-1]      
+            rec = line.split('`')        
+            print rec    
+            if old_line !='':
+                rec_old = old_line.split('`')
+                if rec_old[0] == rec[0] :
+                    old_line = line
+                    continue 
+            if old_line =='':
+                old_line = line                  
+            if float(rec[-2])>0  and float(rec[-1])>0:
+                old_line =line
+                lat = float(float(rec[-2])/360000)
+                lon = float(float(rec[-1])/360000)
+                url_goole = 'http://maps.google.com/maps/api/geocode/xml?latlng=%s,%s&language=zh-CN&sensor=false'%(lat,lon)
+                #url_google = 'http://restapi.amap.com/v3/geocode/regeo?location=%s,%s&key=5973fb6764b8093257dcfd6ff43f6746&s=rsv3&radius=1000&extensions=none&callback=_3598_'%(lat,lon)
+ 		result = get_info(url_goole)
+                print result
+                output_handle.write(result)  
+                output_handle.close()
+                try:
+                    data = get_xml_data(output_file)
+                except:
+                    import traceback
+                    print traceback.format_exc()
+                print rec[0],data
+                output_result_handle.write(rec[0]+'`'+'`'.join(data)+'\n')
+                if i%10 ==0:
+                    time.sleep(5)
+        except:
+            import traceback
+            print traceback.format_exc()
