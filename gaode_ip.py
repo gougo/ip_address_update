@@ -18,7 +18,7 @@ URL='http://restapi.amap.com/v3/geocode/regeo?location=%s,%s&key=5973fb6764b8093
 
 def deco(func):
     def _deco(*args, **kwargs):
-        retry_sec = 30
+        retry_sec = 10
         ret = None
         count = 0
         while True:
@@ -29,7 +29,7 @@ def deco(func):
                 if count > 3 :
                     raise 
                 count += 1       
-                time.sleep(retry_sec + count*10)         
+                time.sleep(retry_sec + count*5)
         return False
     return _deco
 
@@ -133,13 +133,20 @@ class Producer(threading.Thread):
 class Worker(object):
     qurl=Queue.Queue()
     mutex = threading.Lock()
-    threadCount=6    #开启线程数，默认6个线程
+    threadCount=9    #开启线程数，默认6个线程
 
     def __init__(self, input, output):
         self.error_line=open("error_line", "w")
         self.result_file=open(output, "w")
         self.ths = []
         self.input_file = input
+
+    def __del__(self):
+        if self.result_file:
+            self.result_file.close()
+        if self.error_line:
+            self.error_line.close()
+
 
     def init_ths(self):
         for t in range(self.threadCount):
