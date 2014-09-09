@@ -16,7 +16,7 @@ logging.basicConfig(filename = os.path.join(os.getcwd(), 'merge_ipfile.log'),
 
 class MergeIPFile(object):
     def __init__(self, daily_file, all_file):
-        self.today_all = all + ".new"
+        self.today_all = all_file + ".new"
         self.output = open(self.today_all, 'w')
         self.input_today = open(daily_file, 'r')
         self.input_all = open(all_file, 'r')
@@ -24,12 +24,13 @@ class MergeIPFile(object):
     def read_new(self):
         try:
             line_t=self.input_today.next()
+            if len(line_t)>0:
+                return line_t
         except Exception:
             logging.debug("finish read new file")
             self.input_today.close()
             self.input_today = None
-            return False
-        return line_t
+        return False
 
 
     def merge(self):
@@ -50,6 +51,7 @@ class MergeIPFile(object):
 
             if self.input_today:
                 line_t =  self.read_new()
+                
                 while line_t:
                     new_head, new_end, new_address = line_t.strip().split('`',2)
                     new_head = int(new_head)
@@ -58,6 +60,7 @@ class MergeIPFile(object):
                     if all_address == new_address:
                         if new_head > all_head:
                             if new_end <= all_end:
+                                line_t =  self.read_new()
                                 continue
                             else:
                                 before_new_end=new_end
@@ -68,6 +71,7 @@ class MergeIPFile(object):
                         else:
                             all_head=new_head
                             if new_end <= all_end:
+                                line_t =  self.read_new()
                                 continue
                             else:
                                 before_new_end=new_end
@@ -77,14 +81,35 @@ class MergeIPFile(object):
                                 break
                     else:
                         if new_head > all_head:
-                            if new_end<=all_end:
+                            if new_end<all_end:
                                 self.output.write("%s`%s`%s\n"%(all_head, new_head-1, all_address))
                                 self.output.write("%s`%s`%s\n"%(new_head, new_end, new_address))
                                 all_head=new_end+1
+                                line_t =  self.read_new()
                                 continue
                             else:
                                 self.output.write("%s`%s`%s\n"%(all_head, new_head-1, all_address))
                                 before_new_end=new_end
                                 before_new_head = new_head
                                 before_address = new_address
+                                line_t =  self.read_new()
                                 continue
+                        else:
+                            if new_end<all_end:
+                                self.output.write("%s`%s`%s\n"%(new_head, new_end, new_address))
+                                all_head = new_end+1
+                                line_t=self.read_new()
+                                continue
+                            else:
+                                before_new_end=new_end
+                                before_new_head = new_head
+                                before_address = new_address
+                                break
+                else:
+                    self.output.write("%s`%s`%s\n"%(all_head, all_end, all_address))
+            else:
+                self.output.write("%s`%s`%s\n" %(all_head, all_end, all_address))
+
+if __name__=='__main__':
+    mif=MergeIPFile(sys.argv[1], sys.argv[2])
+    mif.merge()
