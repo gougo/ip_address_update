@@ -13,6 +13,10 @@ import logging
 import traceback
 import threading
 import Queue
+import os
+logging.basicConfig(filename = os.path.join(os.getcwd(), 'run_log'),
+                    level = logging.DEBUG,
+                    format = '%(asctime)s - %(levelname)s: %(message)s')
 
 URL='http://restapi.amap.com/v3/geocode/regeo?location=%s,%s&key=5973fb6764b8093257dcfd6ff43f6746&s=rsv3&extensions=base'
 
@@ -54,10 +58,10 @@ def get_info(url):
         return False
 
 class ThreadWork(threading.Thread):
-    def __init__(self, qurl, mutex, error_log, result_log):
+    def __init__(self, qurl, mutex, result_log):
         threading.Thread.__init__(self)
         self.qurl=qurl
-        self.error_log = error_log
+        # self.error_log = error_log
         self.result_file = result_log
         self.lock=mutex
         # self.cond=threading.Condition()
@@ -85,14 +89,16 @@ class ThreadWork(threading.Thread):
                     city = s['regeocode']['addressComponent']['city']
                     # adcode = s['regeocode']['addressComponent']['adcode']
                     if prov == []:
-                        self.error_log.write("nofound:%s\n"%ddc[1])
+                        # self.error_log.write("nofound:%s\n"%ddc[1])
+                        logging.error("nofound:%s\n"%ddc[1])
                         break
                     if city == []:
                         city = ''
                     self.result_file.write("%s`%s`%s\n"%(ddc[0], prov.encode('utf8'), city.encode('utf8')))
                 except Exception,e:
-                    logging.error(e.args)
-                    self.error_log.write("%s`%s\n"%ddc)
+                    logging.warn(e.args)
+                    # self.error_log.write("%s`%s\n"%ddc)
+                    logging.error("%s`%s\n"%ddc)
                 break
             # self.lock.release()
 
@@ -118,13 +124,14 @@ class Producer(threading.Thread):
                 line=line.strip()
                 rec = line.split('`')
                 if len(rec) !=3:
-                    self.error_line.write("fielderr:%s\n"%line)
+                    logging.error("fielderr:%s\n"%line)
+                    # self.error_line.write("fielderr:%s\n"%line)
                     continue
-                if float(rec[-2])>0  and float(rec[-1])>0:
-                    lat = '%.4f'%(float(float(rec[-1])/float(360000)))
-                    lon = '%.4f'%(float(float(rec[-2])/float(360000)))
+                # if float(rec[-2])>0  and float(rec[-1])>0:
+                #     lat = '%.4f'%(float(float(rec[-1])/float(360000)))
+                #     lon = '%.4f'%(float(float(rec[-2])/float(360000)))
 
-                _url = URL % (lat, lon)
+                _url = URL % (rec[-1], rec[-2])
                 self.qurl.put((rec[0], _url), block=True)
 
         global READ_FINISH
@@ -150,7 +157,7 @@ class Worker(object):
 
     def init_ths(self):
         for t in range(self.threadCount):
-            thread=ThreadWork(self.qurl, self.mutex, self.error_line, self.result_file)
+            thread=ThreadWork(self.qurl, self.mutex, self.result_file)
             # thread.setDaemon(True)
             thread.start()
             self.ths.append(thread)
@@ -185,68 +192,11 @@ class Worker(object):
         self.wait()
         # self.qurl.join()
 
-class IP2Addr(object):
-    url='http://restapi.amap.com/v3/geocode/regeo?location=%s,%s&key=5973fb6764b8093257dcfd6ff43f6746&s=rsv3&radius=1000&extensions=none'
-    # ipfile="get250.china.seq.log"
-
-    def __init__(self):
-        self.error_line=open("error_line", "w")
-        self.result_file=open("tf_ip_add", "w")
-
-    def get_add(self, lat, lon):
-        _url = self.url % (lat, lon)
-        result=get_info(_url)
-        if result:
-            try:
-                s = json.loads(result)
-                prov = s['regeocode']['addressComponent']['province']
-                city = s['regeocode']['addressComponent']['city']
-                if prov == []:
-                    # prov = ''
-                    self.error_line.write("nofound:%s\n"%_url)
-                    return False
-                if city == []:
-                    city = ''
-
-                return (prov.encode('utf8'), city.encode('utf8'))
-            except Exception, e:
-                logging.error(e.args)
-        return False
-
-    def readIP(self):
-        with open(IPFILE,"r") as ip_file:
-            for line in ip_file:
-                line=line.strip()
-                rec = line.split('`')
-                if len(rec) !=6:
-                    self.error_line.write("fielderr:%s\n"%line)
-                    continue
-
-                if float(rec[-2])>0  and float(rec[-1])>0:
-                    lat = '%.4f'%(float(float(rec[-1])/float(360000)))
-                    lon = '%.4f'%(float(float(rec[-2])/float(360000)))
-                    result=self.get_add(lat, lon)
-                    if result:
-                        self.result_file.write("%s`%s`%s\n" % (rec[0], result[0], result[1]))
-                    else:
-                        self.error_line.write("adderr:%s\n"%line)
-                else:
-                    self.error_line.write("jwerr:%s\n"%line)
-
-    def __del__(self):
-        if self.result_file:
-            self.result_file.close()
-        if self.error_line:
-            self.error_line.close()
-
-
-    def run(self):
-        self.readIP()
-
-
-
-
 if __name__ == "__main__":
+    '''
+    1 input
+    2 output
+    '''
     worker=Worker(sys.argv[1], sys.argv[2])
     worker.run()
 

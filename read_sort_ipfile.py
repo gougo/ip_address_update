@@ -9,6 +9,11 @@ Created on 2014-9-2
 '''
 import logging
 import sys
+import os
+logging.basicConfig(filename = os.path.join(os.getcwd(), 'sort_ipfile.log'),
+                    level = logging.DEBUG,
+                    format = '%(asctime)s - %(levelname)s: %(message)s')
+
 
 class GenIPAddressMap(object):
     '''

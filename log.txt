@@ -1,0 +1,2 @@
+DEBUG:root:this is a message
+DEBUG:root:this is a message
