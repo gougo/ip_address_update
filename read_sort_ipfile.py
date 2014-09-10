@@ -76,5 +76,9 @@ class GenIPAddressMap(object):
 
 
 if __name__=="__main__":
+    '''
+    1 input
+    2 output
+    '''
     ip_map=GenIPAddressMap(sys.argv[1], sys.argv[2])
     ip_map.run()
