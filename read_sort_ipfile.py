@@ -48,7 +48,7 @@ class GenIPAddressMap(object):
                 else:
                     if len(bf_address) == 1:
                         if address == bf_address[0]:
-                            diff = int(ip)-int(bf_ip)
+                            diff = long(ip)-long(bf_ip)
                             if diff>self.MERGE_STANDARD:
                                 logging.info("diff:%s", diff)
                                 self.output.write("%s`%s`%s\n" % (head_ip, bf_ip, bf_address[0]))
